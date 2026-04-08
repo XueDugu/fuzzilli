@@ -131,20 +131,19 @@ if profile == nil || profileName == nil {
 let numJobs = args.int(for: "--jobs") ?? 1
 let logLevelName = args["--logLevel"] ?? "info"
 let engineName = args["--engine"] ?? "mutation"
-let corpusName = args["--corpus"] ?? "basic"
 let maxIterations = args.int(for: "--maxIterations") ?? -1
 let maxRuntimeInHours = args.int(for: "--maxRuntimeInHours") ?? -1
 let minMutationsPerSample = args.int(for: "--minMutationsPerSample") ?? 25
 let minCorpusSize = args.int(for: "--minCorpusSize") ?? 1000
 let maxCorpusSize = args.int(for: "--maxCorpusSize") ?? Int.max
-let markovDropoutRate = args.double(for: "--markovDropoutRate") ?? 0.10
 let consecutiveMutations = args.int(for: "--consecutiveMutations") ?? 5
 let minimizationLimit = args.double(for: "--minimizationLimit") ?? 0.0
 let storagePath = args["--storagePath"]
 var resume = args.has("--resume")
 let overwrite = args.has("--overwrite")
 let staticCorpus = args.has("--staticCorpus")
-let exportStatistics = args.has("--exportStatistics")
+let explicitlySelectedCorpus = args["--corpus"]
+let explicitlyEnabledStatistics = args.has("--exportStatistics")
 let statisticsExportInterval = args.uint(for: "--statisticsExportInterval") ?? 10
 let corpusImportPath = args["--importCorpus"]
 let corpusImportModeName = args["--corpusImportMode"] ?? "default"
@@ -152,12 +151,36 @@ let instanceType = args["--instanceType"] ?? "standalone"
 let corpusSyncMode = args["--corpusSyncMode"] ?? "full"
 let diagnostics = args.has("--diagnostics")
 let inspect = args.has("--inspect")
-let swarmTesting = args.has("--swarmTesting")
-let argumentRandomization = args.has("--argumentRandomization")
 let additionalArguments = args["--additionalArguments"] ?? ""
 let tag = args["--tag"]
 let enableWasm = args.has("--wasm")
 let forDifferentialFuzzing = args.has("--forDifferentialFuzzing")
+
+var corpusName = explicitlySelectedCorpus ?? "basic"
+var markovDropoutRate = args.double(for: "--markovDropoutRate") ?? 0.10
+var exportStatistics = explicitlyEnabledStatistics
+var swarmTesting = args.has("--swarmTesting")
+var argumentRandomization = args.has("--argumentRandomization")
+var autoAppliedV8Defaults = [String]()
+
+if profileName == "v8" {
+    if explicitlySelectedCorpus == nil {
+        corpusName = "markov"
+        autoAppliedV8Defaults.append("--corpus=markov")
+    }
+    if !argumentRandomization {
+        argumentRandomization = true
+        autoAppliedV8Defaults.append("--argumentRandomization")
+    }
+    if !swarmTesting {
+        swarmTesting = true
+        autoAppliedV8Defaults.append("--swarmTesting")
+    }
+    if storagePath != nil && !exportStatistics {
+        exportStatistics = true
+        autoAppliedV8Defaults.append("--exportStatistics")
+    }
+}
 
 var timeout : Timeout
 if let raw_timeout = args.string(for: "--timeout") {
@@ -330,6 +353,10 @@ if args.unusedOptionals.count > 0 {
 
 // Initialize the logger such that we can print to the screen.
 let logger = Logger(withLabel: "Cli")
+
+if !autoAppliedV8Defaults.isEmpty {
+    logger.info("Applying V8 defaults: \(autoAppliedV8Defaults.joined(separator: ", "))")
+}
 
 ///
 /// Chose the code generator weights.
@@ -575,6 +602,7 @@ for sig in [SIGINT, SIGTERM] {
 fuzzer.sync {
     // Always want some statistics.
     fuzzer.addModule(Statistics())
+    fuzzer.addModule(AdaptiveMutatorScheduler())
 
     // Exit this process when the main fuzzer stops.
     fuzzer.registerEventListener(for: fuzzer.events.ShutdownComplete) { reason in
@@ -700,6 +728,7 @@ for _ in 1..<numJobs {
         Thread.sleep(forTimeInterval: delay)
 
         worker.addModule(Statistics())
+        worker.addModule(AdaptiveMutatorScheduler())
         worker.addModule(ThreadChild(for: worker, parent: fuzzer))
         worker.initialize()
         worker.start()

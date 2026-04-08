@@ -62,6 +62,7 @@ public class MutationEngine: FuzzEngine {
                 } else {
                     // Try a different mutator.
                     mutator.failedToGenerate()
+                    mutator.recordDirectFailure()
                     mutator = fuzzer.mutators.randomElement()
                 }
             }
@@ -72,7 +73,7 @@ public class MutationEngine: FuzzEngine {
             }
 
             assert(program !== parent)
-            let outcome = execute(program)
+            let outcome = execute(program, originatingMutator: mutator)
 
             // Mutate the program further if it succeeded.
             if .succeeded == outcome {

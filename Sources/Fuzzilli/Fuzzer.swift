@@ -66,7 +66,7 @@ public class Fuzzer {
     public let programTemplates: WeightedList<ProgramTemplate>
 
     /// The mutators used by the engine.
-    public let mutators: WeightedList<Mutator>
+    public private(set) var mutators: WeightedList<Mutator>
 
     /// The evaluator to score generated programs.
     public let evaluator: ProgramEvaluator
@@ -241,6 +241,14 @@ public class Fuzzer {
         // This builds a graph that we need later for scheduling generators.
         self.contextGraph = ContextGraph(for: generators, withLogger: self.logger)
         self.codeGenerators = generators
+    }
+
+    /// Replace the active mutator weights.
+    public func setMutators(_ mutators: WeightedList<Mutator>) {
+        guard !mutators.isEmpty else {
+            fatalError("Mutator list must not be empty")
+        }
+        self.mutators = mutators
     }
 
     /// Adds a module to this fuzzer. Can only be called before the fuzzer is initialized.

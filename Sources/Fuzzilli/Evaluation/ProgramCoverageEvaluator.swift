@@ -20,10 +20,10 @@ public class CovEdgeSet: ProgramAspects {
     private var numEdges: UInt32
     fileprivate var edges: UnsafeMutablePointer<UInt32>?
 
-    init(edges: UnsafeMutablePointer<UInt32>?, numEdges: UInt32) {
+    init(edges: UnsafeMutablePointer<UInt32>?, numEdges: UInt32, executionTime: TimeInterval) {
         self.numEdges = numEdges
         self.edges = edges
-        super.init(outcome: .succeeded)
+        super.init(outcome: .succeeded, executionTime: executionTime)
     }
 
     deinit {
@@ -164,7 +164,7 @@ public class ProgramCoverageEvaluator: ComponentBase, ProgramEvaluator {
         }
 
         if result == 1 {
-            return CovEdgeSet(edges: newEdgeSet.edge_indices, numEdges: newEdgeSet.count)
+            return CovEdgeSet(edges: newEdgeSet.edge_indices, numEdges: newEdgeSet.count, executionTime: execution.execTime)
         } else {
             assert(newEdgeSet.edge_indices == nil && newEdgeSet.count == 0)
             return nil
@@ -181,7 +181,7 @@ public class ProgramCoverageEvaluator: ComponentBase, ProgramEvaluator {
 
         if result == 1 {
             // For minimization of crashes we only care about the outcome, not the edges covered.
-            return ProgramAspects(outcome: execution.outcome)
+            return ProgramAspects(outcome: execution.outcome, executionTime: execution.execTime)
         } else {
             return nil
         }

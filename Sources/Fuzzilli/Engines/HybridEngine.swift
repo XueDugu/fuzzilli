@@ -147,6 +147,7 @@ public class HybridEngine: FuzzEngine {
                 } else {
                     // Try a different mutator.
                     mutator.failedToGenerate()
+                    mutator.recordDirectFailure()
                     mutator = fuzzer.mutators.randomElement()
                 }
             }
@@ -157,7 +158,7 @@ public class HybridEngine: FuzzEngine {
             }
 
             assert(program !== parent)
-            let outcome = execute(program)
+            let outcome = execute(program, originatingMutator: mutator)
 
             // Mutate the program further if it succeeded.
             if .succeeded == outcome {

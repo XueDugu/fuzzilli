@@ -12,12 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import Foundation
+
 /// Aspects of a program that make it special.
 public class ProgramAspects: CustomStringConvertible {
     let outcome: ExecutionOutcome
+    public let executionTime: TimeInterval
 
-    public init(outcome: ExecutionOutcome) {
+    public init(outcome: ExecutionOutcome, executionTime: TimeInterval = 0) {
         self.outcome = outcome
+        self.executionTime = executionTime
     }
 
     public var description: String {

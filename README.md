@@ -2,6 +2,37 @@
 
 A (coverage-)guided fuzzer for dynamic language interpreters based on a custom intermediate language ("FuzzIL") which can be mutated and translated to JavaScript.
 
+## V8-Focused Fork
+
+This fork is maintained with a V8-first workflow in mind. The codebase still contains the upstream multi-profile support, but the default operational path in this tree is:
+
+1. Build or obtain a V8 `d8` binary with `v8_fuzzilli=true` and coverage instrumentation enabled.
+2. Build `FuzzilliCli`.
+3. Start fuzzing through `./Tools/run-v8-fuzz.sh /path/to/d8 [storage-dir]`.
+
+The V8 wrapper enables the settings that are currently the most useful for long-running V8 campaigns in this tree:
+
+* `--profile=v8`
+* `--engine=mutation`
+* `--corpus=markov`
+* `--argumentRandomization`
+* `--swarmTesting`
+* `--exportStatistics`
+
+When running the raw CLI with `--profile=v8`, the fork now auto-enables the same V8-oriented defaults unless you override them explicitly. In practice that means `markov`, argument randomization, swarm testing, and statistics export when `--storagePath` is set.
+
+The main V8-specific changes added in this fork are:
+
+* execution-time-aware rare-edge scheduling in `MarkovCorpus`
+* online adaptive mutator reweighting via `AdaptiveMutatorScheduler`
+* a V8-specific launch wrapper in [Tools/run-v8-fuzz.sh](Tools/run-v8-fuzz.sh)
+
+Background and references for the post-2022 fuzzing optimizations used here are in [Docs/V8ResearchOptimizations.md](Docs/V8ResearchOptimizations.md).
+
+Important: a stock upstream/canary `d8` binary is not enough for this workflow. The target must support Fuzzilli's REPRL handshake and coverage bitmap setup, which requires a V8 build produced with the Fuzzilli integration enabled.
+
+Also note that a fresh run without an existing corpus will usually spend its early runtime in initial corpus generation. If you want to reach mutation fuzzing immediately, start from a small existing corpus via `--importCorpus=...` or resume an earlier session.
+
 ## Usage
 
 The basic steps to use this fuzzer are:

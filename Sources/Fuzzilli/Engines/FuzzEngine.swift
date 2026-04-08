@@ -32,7 +32,7 @@ public class FuzzEngine: ComponentBase {
         fatalError("Must be implemented by child classes")
     }
 
-    final func execute(_ program: Program, withTimeout timeout: UInt32? = nil) -> ExecutionOutcome {
+    final func execute(_ program: Program, withTimeout timeout: UInt32? = nil, originatingMutator: Mutator? = nil) -> ExecutionOutcome {
         let program = postProcessor?.process(program, for: fuzzer) ?? program
 
         fuzzer.dispatchEvent(fuzzer.events.ProgramGenerated, data: program)
@@ -43,6 +43,7 @@ public class FuzzEngine: ComponentBase {
             case .crashed(let termsig):
                 fuzzer.processCrash(program, withSignal: termsig, withStderr: execution.stderr, withStdout: execution.stdout, origin: .local, withExectime: execution.execTime)
                 program.contributors.generatedCrashingSample()
+                originatingMutator?.recordDirectCrashingSample()
 
             case .succeeded:
                 fuzzer.dispatchEvent(fuzzer.events.ValidProgramFound, data: program)
@@ -57,8 +58,10 @@ public class FuzzEngine: ComponentBase {
 
                 if isInteresting {
                     program.contributors.generatedInterestingSample()
+                    originatingMutator?.recordDirectInterestingSample()
                 } else {
                     program.contributors.generatedValidSample()
+                    originatingMutator?.recordDirectValidSample()
                 }
 
             case .failed(_):
@@ -67,10 +70,12 @@ public class FuzzEngine: ComponentBase {
                 }
                 fuzzer.dispatchEvent(fuzzer.events.InvalidProgramFound, data: program)
                 program.contributors.generatedInvalidSample()
+                originatingMutator?.recordDirectInvalidSample()
 
             case .timedOut:
                 fuzzer.dispatchEvent(fuzzer.events.TimeOutFound, data: program)
                 program.contributors.generatedTimeOutSample()
+                originatingMutator?.recordDirectTimeOutSample()
         }
 
         if fuzzer.config.enableDiagnostics {

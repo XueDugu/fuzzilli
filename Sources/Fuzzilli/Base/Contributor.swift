@@ -38,6 +38,16 @@ public class Contributor: Hashable {
     // Total number of instructions added to programs by this contributor.
     private var totalInstructionProduced = 0
 
+    // Direct outcome statistics for the contributor instance currently selected by the engine.
+    // These are intentionally not propagated through a program's parent chain and are mainly used
+    // for adaptive scheduling.
+    private var directValidSamples = 0
+    private var directInterestingSamples = 0
+    private var directInvalidSamples = 0
+    private var directTimedOutSamples = 0
+    private var directCrashingSamples = 0
+    private var directFailures = 0
+
     public init(name: String) {
         self.name = name
     }
@@ -78,12 +88,68 @@ public class Contributor: Hashable {
         failures += 1
     }
 
+    func recordDirectValidSample() {
+        directValidSamples += 1
+    }
+
+    func recordDirectInterestingSample() {
+        directInterestingSamples += 1
+    }
+
+    func recordDirectInvalidSample() {
+        directInvalidSamples += 1
+    }
+
+    func recordDirectTimeOutSample() {
+        directTimedOutSamples += 1
+    }
+
+    func recordDirectCrashingSample() {
+        directCrashingSamples += 1
+    }
+
+    func recordDirectFailure() {
+        directFailures += 1
+    }
+
     public var crashesFound: Int {
         return crashingSamples
     }
 
     public var totalSamples: Int {
         return validSamples + interestingSamples + invalidSamples + timedOutSamples + crashingSamples
+    }
+
+    public var directValidSampleCount: Int {
+        return directValidSamples
+    }
+
+    public var directInterestingSampleCount: Int {
+        return directInterestingSamples
+    }
+
+    public var directInvalidSampleCount: Int {
+        return directInvalidSamples
+    }
+
+    public var directTimeOutSampleCount: Int {
+        return directTimedOutSamples
+    }
+
+    public var directCrashSampleCount: Int {
+        return directCrashingSamples
+    }
+
+    public var directFailureCount: Int {
+        return directFailures
+    }
+
+    public var directTotalSamples: Int {
+        return directValidSamples + directInterestingSamples + directInvalidSamples + directTimedOutSamples + directCrashingSamples
+    }
+
+    public var directAttempts: Int {
+        return directTotalSamples + directFailures
     }
 
     // If this is low, that means the CodeGenerator has dynamic requirements that are not met most of the time.
@@ -111,6 +177,31 @@ public class Contributor: Hashable {
         let totalAttempts = totalSamples + failures
         guard totalAttempts > 0 else { return nil }
         return Double(failures) / Double(totalAttempts)
+    }
+
+    public var directCorrectnessRate: Double? {
+        guard directTotalSamples > 0 else { return nil }
+        return Double(directValidSamples + directInterestingSamples) / Double(directTotalSamples)
+    }
+
+    public var directInterestingSamplesRate: Double? {
+        guard directTotalSamples > 0 else { return nil }
+        return Double(directInterestingSamples) / Double(directTotalSamples)
+    }
+
+    public var directTimeoutRate: Double? {
+        guard directTotalSamples > 0 else { return nil }
+        return Double(directTimedOutSamples) / Double(directTotalSamples)
+    }
+
+    public var directCrashRate: Double? {
+        guard directTotalSamples > 0 else { return nil }
+        return Double(directCrashingSamples) / Double(directTotalSamples)
+    }
+
+    public var directFailureRate: Double? {
+        guard directAttempts > 0 else { return nil }
+        return Double(directFailures) / Double(directAttempts)
     }
 
     // Note: even if for example a CodeGenerator always generates exactly one instruction, this number may be

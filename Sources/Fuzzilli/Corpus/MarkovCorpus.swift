@@ -10,12 +10,14 @@ import Foundation
 /// scheduled that number of times. This implementation finds 1 / desiredSelectionProportion
 /// of the least hit edges, and schedules those. After those have been mutated and evalutated,
 /// the list is regenerated.
-/// TODO:
-/// - In order to properly implement the paper, the number of executions of each sample needs
-///     to be scaled by its execution time (e.g. multiple by timeout / execution time), to
-///     prioritize faster samples
 
 public class MarkovCorpus: ComponentBase, Corpus {
+    private struct ProgramCandidate {
+        let program: Program
+        var rareEdgeHits: Int
+        var minEdgeHitCount: UInt32
+    }
+
     // All programs that were added to the corpus so far
     private var allIncludedPrograms: [Program] = []
     // Queue of programs to be executed next, all of which hit a rare edge
@@ -43,6 +45,10 @@ public class MarkovCorpus: ComponentBase, Corpus {
     // Equivalent to 1 - dropoutRate
     private var dropoutRate: Double
 
+    // Per-program execution times are used to bias the seed energy towards faster samples.
+    private var executionTimesByProgramId: [UUID: TimeInterval] = [:]
+    private var totalExecutionTime: TimeInterval = 0
+
     // The scheduler will initially selectd the 1 / desiredSelectionProportion samples with the least frequent
     // edge hits in each round, before dropout is applied
     private let desiredSelectionProportion = 8
@@ -69,6 +75,11 @@ public class MarkovCorpus: ComponentBase, Corpus {
         prepareProgramForInclusion(program, index: self.size)
 
         allIncludedPrograms.append(program)
+        let executionTime = max(origCov.executionTime, 0.000_001)
+        if let previousTime = executionTimesByProgramId.updateValue(executionTime, forKey: program.id) {
+            totalExecutionTime -= previousTime
+        }
+        totalExecutionTime += executionTime
         for e in origCov.getEdges() {
             edgeMap[e] = program
         }
@@ -99,8 +110,9 @@ public class MarkovCorpus: ComponentBase, Corpus {
             if remainingEnergy > 0 {
                 remainingEnergy -= 1
             } else {
-                remainingEnergy = energyBase()
                 currentProg = programExecutionQueue.popLast()!
+                let energy = max(energyForProgram(currentProg), 1)
+                remainingEnergy = energy - 1
             }
             return currentProg
         } else {
@@ -132,17 +144,16 @@ public class MarkovCorpus: ComponentBase, Corpus {
         let endIndex = min(startIndex + desiredEdgeCount, edgeCountsSorted.count - 1)
         let maxEdgeCountToFind = edgeCountsSorted[endIndex]
 
-        // Find the n edges with counts <= maxEdgeCountToFind.
-        for (i, val) in edgeCounts.enumerated() {
-            // Applies dropout on otherwise valid samples, to ensure variety between instances
-            // This will likely select some samples multiple times, which is acceptable as
-            // it is proportional to how many infrquently hit edges the sample has
-            if val != 0 && val <= maxEdgeCountToFind && (probability(1 - dropoutRate) || programExecutionQueue.isEmpty) {
-                if let prog = edgeMap[UInt32(i)] {
-                    programExecutionQueue.append(prog)
-                }
-            }
+        var candidates = collectCandidates(from: edgeCounts, maxEdgeCountToFind: maxEdgeCountToFind, applyDropout: true)
+        if candidates.isEmpty {
+            candidates = collectCandidates(from: edgeCounts, maxEdgeCountToFind: maxEdgeCountToFind, applyDropout: false)
         }
+        let averageExecutionTime = averageExecutionTimeInCorpus()
+        let prioritizedPrograms = candidates.values.sorted {
+            prioritizationScore(for: $0, averageExecutionTime: averageExecutionTime) <
+            prioritizationScore(for: $1, averageExecutionTime: averageExecutionTime)
+        }.map(\.program)
+        programExecutionQueue.append(contentsOf: prioritizedPrograms)
 
         // Determine how many edges have been leaked and produce a warning if over 1% of total edges
         // Done as second pass for code clarity
@@ -166,7 +177,7 @@ public class MarkovCorpus: ComponentBase, Corpus {
         if programExecutionQueue.count == 0 {
             logger.fatal("Program regeneration failed")
         }
-        logger.info("Markov Corpus selected \(programExecutionQueue.count) new programs")
+        logger.info("Markov Corpus selected \(programExecutionQueue.count) new programs, average seed exec time \(String(format: "%.2f", averageExecutionTime * 1000))ms")
     }
 
     public var size: Int {
@@ -204,5 +215,48 @@ public class MarkovCorpus: ComponentBase, Corpus {
     // Ramp up the number of times a sample is used as the initial seed over time
     private func energyBase() -> UInt32 {
         return UInt32(Foundation.log10(Float(totalExecs))) + 1
+    }
+
+    private func collectCandidates(from edgeCounts: [UInt32], maxEdgeCountToFind: UInt32, applyDropout: Bool) -> [UUID: ProgramCandidate] {
+        var candidates = [UUID: ProgramCandidate]()
+
+        for (index, hitCount) in edgeCounts.enumerated() {
+            guard hitCount != 0 && hitCount <= maxEdgeCountToFind else { continue }
+            guard !applyDropout || probability(1 - dropoutRate) else { continue }
+            guard let program = edgeMap[UInt32(index)] else { continue }
+
+            if var current = candidates[program.id] {
+                current.rareEdgeHits += 1
+                current.minEdgeHitCount = min(current.minEdgeHitCount, hitCount)
+                candidates[program.id] = current
+            } else {
+                candidates[program.id] = ProgramCandidate(program: program, rareEdgeHits: 1, minEdgeHitCount: hitCount)
+            }
+        }
+
+        return candidates
+    }
+
+    private func averageExecutionTimeInCorpus() -> TimeInterval {
+        guard !executionTimesByProgramId.isEmpty else {
+            return Double(fuzzer.config.timeout) / 1000.0
+        }
+        return max(totalExecutionTime / Double(executionTimesByProgramId.count), 0.000_001)
+    }
+
+    private func executionTime(of program: Program) -> TimeInterval {
+        return max(executionTimesByProgramId[program.id] ?? averageExecutionTimeInCorpus(), 0.000_001)
+    }
+
+    private func prioritizationScore(for candidate: ProgramCandidate, averageExecutionTime: TimeInterval) -> Double {
+        let rarityScore = Double(candidate.rareEdgeHits) / Double(max(candidate.minEdgeHitCount, 1))
+        let speedScore = min(4.0, max(0.5, sqrt(averageExecutionTime / executionTime(of: candidate.program))))
+        return rarityScore * speedScore
+    }
+
+    private func energyForProgram(_ program: Program) -> UInt32 {
+        let baseEnergy = max(Double(energyBase()), 1.0)
+        let speedScore = min(4.0, max(0.5, sqrt(averageExecutionTimeInCorpus() / executionTime(of: program))))
+        return UInt32(max(1.0, round(baseEnergy * speedScore)))
     }
 }
