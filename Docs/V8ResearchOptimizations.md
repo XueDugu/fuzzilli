@@ -6,12 +6,15 @@ Implemented now:
 
 * Time-aware rare-edge scheduling in `MarkovCorpus`. Newly interesting seeds now keep their execution time, and rare-edge candidates are prioritized by a combined rarity/speed score before energy is assigned. This follows the broad direction of recent work that optimizes reward per unit time instead of treating all seeds as equally expensive.
 * Online adaptive mutator reweighting in `AdaptiveMutatorScheduler`. The scheduler reweights mutators from direct outcomes of the mutator chosen by the engine, which is closer to recent adaptive operator scheduling work than the previous fixed-weight approach.
+* A V8 JIT-consistency oracle inspired by FuzzJIT. A subset of generated non-Wasm programs is wrapped in an optimization harness that compares observable outputs before and after `%OptimizeFunctionOnNextCall`. This extends the fork beyond crash-only discovery and gives it a path to expose non-crashing JIT miscompilations.
 * A V8-focused launch path in `Tools/run-v8-fuzz.sh` that pins the workflow to the `v8` profile and enables `markov`, `--argumentRandomization`, and `--swarmTesting`.
 
 Recent work used as guidance:
 
 * AMSFuzz (2022): adaptive mutation operator scheduling with bandit-style feedback.
   https://doi.org/10.1016/j.eswa.2022.118162
+* FuzzJIT (USENIX Security 2023): oracle-enhanced fuzzing for JavaScript engine JIT compilers.
+  https://www.usenix.org/conference/usenixsecurity23/presentation/wang-junjie
 * SJFuzz (ESEC/FSE 2023): seed and mutator scheduling for JVM fuzzing.
   https://2023.esec-fse.org/details/fse-2023-research-papers/36/SJFuzz-Seed-Mutator-Scheduling-for-JVM-Fuzzing
 * FOX (2024): coverage-guided fuzzing as online stochastic control.

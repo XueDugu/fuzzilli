@@ -25,6 +25,7 @@ The main V8-specific changes added in this fork are:
 
 * execution-time-aware rare-edge scheduling in `MarkovCorpus`
 * online adaptive mutator reweighting via `AdaptiveMutatorScheduler`
+* a FuzzJIT-inspired JIT-consistency oracle for a subset of V8 samples
 * a V8-specific launch wrapper in [Tools/run-v8-fuzz.sh](Tools/run-v8-fuzz.sh)
 
 Background and references for the post-2022 fuzzing optimizations used here are in [Docs/V8ResearchOptimizations.md](Docs/V8ResearchOptimizations.md).
