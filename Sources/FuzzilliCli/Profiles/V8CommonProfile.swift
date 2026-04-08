@@ -92,6 +92,30 @@ public let ForceMaglevCompilationGenerator = CodeGenerator("ForceMaglevCompilati
     b.callFunction(f, withArgs: arguments)
 }
 
+// Adapted from the official Fuzzilli Maglev profile PR to make OSR-triggered Maglev
+// compilation reachable more often from the standard V8 generators.
+public let ForceOSRThroughLoopGenerator = CodeGenerator("ForceOSRThroughLoopGenerator") { b in
+    let numIterations = 100
+    let selectedIteration = withEqualProbability(
+        {
+            assert(numIterations > 10)
+            return Int.random(in: (numIterations - 10)..<numIterations)
+        },
+        {
+            return Int.random(in: 0..<numIterations)
+        }
+    )
+
+    b.buildRepeatLoop(n: numIterations) { i in
+        b.buildRecursive(n: Int.random(in: 1...3))
+        let targetIteration = b.loadInt(Int64(selectedIteration))
+        let shouldOptimize = b.compare(i, with: targetIteration, using: .equal)
+        b.buildIf(shouldOptimize) {
+            b.eval("%OptimizeOsr()")
+        }
+    }
+}
+
 public let TurbofanVerifyTypeGenerator = CodeGenerator("TurbofanVerifyTypeGenerator", inputs: .one) { b, v in
     b.eval("%VerifyType(%@)", with: [v])
 }

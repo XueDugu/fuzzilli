@@ -25,14 +25,25 @@ The main V8-specific changes added in this fork are:
 
 * execution-time-aware rare-edge scheduling in `MarkovCorpus`
 * online adaptive mutator reweighting via `AdaptiveMutatorScheduler`
-* a FuzzJIT-inspired JIT-consistency oracle for a subset of V8 samples
+* an official-repo-aligned Maglev-focused V8 profile
 * a V8-specific launch wrapper in [Tools/run-v8-fuzz.sh](Tools/run-v8-fuzz.sh)
+
+Recommended profiles in this fork:
+
+* `--profile=v8`: the main V8 fuzzing path and the default choice for mixed TurboFan/Maglev/JIT surface coverage
+* `--profile=maglev`: a narrower, official-repo-aligned Maglev/OSR-focused path for stressing Maglev-specific compilation behavior
 
 Background and references for the post-2022 fuzzing optimizations used here are in [Docs/V8ResearchOptimizations.md](Docs/V8ResearchOptimizations.md).
 
 Important: a stock upstream/canary `d8` binary is not enough for this workflow. The target must support Fuzzilli's REPRL handshake and coverage bitmap setup, which requires a V8 build produced with the Fuzzilli integration enabled.
 
 Also note that a fresh run without an existing corpus will usually spend its early runtime in initial corpus generation. If you want to reach mutation fuzzing immediately, start from a small existing corpus via `--importCorpus=...` or resume an earlier session.
+
+In practice, the fastest way to verify that the target is not only starting correctly but is also performing real mutation fuzzing is:
+
+1. run a short seed-generation session to create a small corpus
+2. rerun with `--importCorpus=...`
+3. confirm in the log that the state changes from `corpusImport` to `fuzzing`
 
 ## Usage
 
